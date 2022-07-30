@@ -1,15 +1,21 @@
 // DOM
 const search = document.getElementById('search');
+const searchStats = document.getElementById('search-stats');
 const characterList = document.getElementById('character-list');
 const characterDetails = document.getElementById('character-details');
+let PREV = null
+let NEXT = null
 
 // queries
 const apiUrl = 'https://rickandmortyapi.com/graphql';
 const characterListQuery = 
-`query ($inputName: String) {
-    characters(filter: { name: $inputName }) {
+`query ($inputName: String, $page: Int) {
+    characters(page: $page, filter: { name: $inputName }) {
       info {
-        count
+        count,
+        pages,
+        prev,
+        next,
       }
       results {
         id,
@@ -32,14 +38,17 @@ const characterDetailsQuery =
     }`;
 
 // funtions
-const searchCharacters = async inputName => {
-    if(inputName.length === 0){
-        displayCharacterList([]);
-        return;
+const searchCharacters = async (inputName, page) => {
+    if (inputName.length === 0 || page === null) {
+        displayCharacterList([])
+        return
     }
+    const { characters, info } = await characterListFetch(inputName, page)
+    info.page = page
+    PREV = info.prev;
+    NEXT = info.next;
+    displayCharacterList(characters, info)
     displayCharacterDetails("");
-    const characters = await characterListFetch(inputName);
-    displayCharacterList(characters);
 }
 
 const searchKeyPressFeedback = async (event, inputName) => {
@@ -70,7 +79,7 @@ const characterDetailsFetch = async inputId => {
     return character;
 }
 
-const characterListFetch = async inputName => {
+const characterListFetch = async (inputName, page) => {
     if (inputName === "") {
         return [];
     }
@@ -81,23 +90,38 @@ const characterListFetch = async inputName => {
         },
         body: JSON.stringify({
             query: characterListQuery,
-            variables: { inputName }
+            variables: { inputName, page }
         })
     })
     const result = await res.json();
     const characters = result.data.characters.results;
-    return characters;
+    const info = result.data.characters.info;
+    return { characters, info };
 }
 
-const displayCharacterList = async characters => {
+const displayCharacterList = async (characters, info) => {
+    if (characters.length < 1) {
+        characterList.innerHTML = ""
+        searchStats.innerHTML = ""
+        return
+    }
     const html = characters.map(character =>
         `<button 
-            class="btn w-100 d-flex btn-outline-dark" 
+            class="btn w-100 text-start btn-outline-dark" 
             onfocus="displayCharacterDetails(${character.id})">    
         <small>${character.name}</small>
         </button>
-        `).join('');
-    characterList.innerHTML = html;
+        `).join('')
+    searchStats.innerHTML = info.page + "/" + info.pages
+    characterList.innerHTML = html
+}
+
+function previousPage() {
+    searchCharacters(search.value, PREV);
+}
+
+function nextPage() {
+    searchCharacters(search.value, NEXT);
 }
 
 const displayCharacterDetails = async id => {
@@ -128,5 +152,5 @@ const displayCharacterDetails = async id => {
 }
 
 // events
-search.addEventListener('input', () => searchCharacters(search.value));
+search.addEventListener('input', () => searchCharacters(search.value, 1));
 search.addEventListener('keypress', (e) => searchKeyPressFeedback(e, search.value));
